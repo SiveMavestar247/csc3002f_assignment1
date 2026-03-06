@@ -23,11 +23,11 @@ groups: Dict[str, Set[str]] = {}
 # Simple credential store for prototype:
 # username -> password
 credentials: Dict[str, str] = {
-    "alice": "pass",
-    "bob": "pass",
-    "carol": "pass",
-    "dave": "pass",
-    "erin": "pass",
+    "Mariah": "pass123",
+    "Kendrick": "pass123",
+    "Nicki": "pass123",
+    "Cole": "pass123",
+    "Drake": "pass123",
 }
 
 def control(conn: socket.socket, ok: bool, message: str, req_seq: Optional[int] = None, **extra: Any) -> None:
