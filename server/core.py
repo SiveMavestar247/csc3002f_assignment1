@@ -7,7 +7,7 @@ handling logic.
 
 import socket
 import threading
-from typing import Dict
+from typing import Dict, Tuple
 
 
 class ChatServer:
@@ -22,7 +22,7 @@ class ChatServer:
         self.host = host
         self.port = port
         # username -> socket
-        self.active_clients: Dict[str, socket.socket] = {}
+        self.active_clients: Dict[str, Tuple[socket.socket, socket.socket]] = {}
         self._server_socket: socket.socket | None = None
 
     def start(self):
@@ -38,34 +38,34 @@ class ChatServer:
                 target=self._handle_client, args=(client_sock,), daemon=True
             ).start()
 
-    def _handle_client(self, client_socket: socket.socket):
+    def _handle_client(self, client_tcp_socket: socket.socket):
         """Internal worker for a single client connection."""
 
         def broadcast_user_list():
-            users = ",".join(self.active_clients.keys())
+            users : Tuple[str] = ()
+            for user in list(self.active_clients.keys()):
+                users += (f"{user}({self.active_clients[user][1]})",)
+            users : str= ",".join(users)
             msg = f"USERS|{users}"
-            for sock in list(self.active_clients.values()):
-                try:
-                    sock.send(msg.encode("utf-8"))
-                except Exception:
-                    pass
+            for sockets in list(self.active_clients.values()):
+                sockets[0].send(msg.encode("utf-8"))
 
         try:
-            username = client_socket.recv(1024).decode("utf-8")
-            self.active_clients[username] = client_socket
+            username, client_udp_socket = client_tcp_socket.recv(1024).decode("utf-8").split('|')
             print(f"[+] {username} connected.")
+            self.active_clients[username] = (client_tcp_socket, client_udp_socket)
             broadcast_user_list()
 
             while True:
-                data = client_socket.recv(1024).decode("utf-8")
+                data = client_tcp_socket.recv(1024).decode("utf-8")
                 if not data:
                     break
                 target_user, message = data.split("|", 1)
-                if target_user in self.active_clients:
+                if target_user in self.active_clients.keys():
                     formatted = f"{username}|{message}"
-                    self.active_clients[target_user].send(formatted.encode("utf-8"))
+                    self.active_clients[target_user][0].send(formatted.encode("utf-8"))
                 else:
-                    client_socket.send(
+                    client_tcp_socket.send(
                         f"SYSTEM|{target_user} is offline.".encode("utf-8")
                     )
         except Exception as e:
@@ -73,8 +73,8 @@ class ChatServer:
         finally:
             # cleanup on disconnect
             for user, sock in list(self.active_clients.items()):
-                if sock == client_socket:
+                if sock[0] == client_tcp_socket:
                     del self.active_clients[user]
                     print(f"[-] {user} disconnected.")
             broadcast_user_list()
-            client_socket.close()
+            client_tcp_socket.close()
