@@ -30,3 +30,7 @@ chat_containers: dict[str, tk.Frame] = {}             # contact -> frame that ho
 chat_history_container: tk.Frame | None = None       # Main container for chat frames
 main_window: tk.Tk | None = None                    # Main application window
 lbl_chat_title: tk.Label | None = None
+
+# Callbacks for file transfers
+on_file_received = None  # Called when file is received: (sender, filename, filepath)
+on_file_sent = None      # Called when file is sent: (target_user, filename)

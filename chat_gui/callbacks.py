@@ -10,7 +10,7 @@ from tkinter import messagebox
 from datetime import datetime
 
 from . import state
-from .chat_widgets import create_chat_frame_for_user
+from .chat_widgets import create_chat_frame_for_user, add_file_transfer_bubble
 
 
 def handle_network_error(error_msg: str):
@@ -103,3 +103,27 @@ def add_incoming_bubble_safely(sender: str, message: str, timestamp: str):
     ).pack(anchor="w")
     chat_canvas.update_idletasks()
     chat_canvas.yview_moveto(1.0)
+
+
+def handle_file_received(sender: str, filename: str, filepath: str):
+    """Called when a file transfer is completed."""
+    timestamp = datetime.now().strftime("%I:%M %p")
+
+    # ensure we have a frame for this sender
+    if sender not in state.chat_frames:
+        create_chat_frame_for_user(sender)
+
+    # update GUI from main thread safely
+    state.root.after(0, add_file_transfer_bubble, filename, filepath, timestamp, sender, False)
+
+
+def handle_file_sent(target_user: str, filename: str):
+    """Called when we send a file to another user."""
+    timestamp = datetime.now().strftime("%I:%M %p")
+
+    # ensure we have a frame for this contact
+    if target_user not in state.chat_frames:
+        create_chat_frame_for_user(target_user)
+
+    # update GUI from main thread safely (filepath=None for sent files)
+    state.root.after(0, add_file_transfer_bubble, filename, None, timestamp, target_user, True)

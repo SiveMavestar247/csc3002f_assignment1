@@ -6,10 +6,12 @@ and the message entry field.
 """
 
 import tkinter as tk
+from tkinter import filedialog
 from datetime import datetime
 
 from . import state
 from .chat_widgets import create_scrollable_area, add_message_bubble
+from .callbacks import handle_file_received, handle_file_sent
 
 
 # helper functions for mouse wheel binding
@@ -41,8 +43,8 @@ def open_main_app():
     main_window = tk.Toplevel()
     state.main_window = main_window
     main_window.title(f"My Chat App - Logged in as: {state.current_user}")
-    main_window.geometry("950x500")
-    main_window.resizable(False, False)
+    main_window.geometry("1150x500")
+    # main_window.resizable(False, False)
 
     def on_closing():
         state.chat_client.disconnect()
@@ -99,8 +101,8 @@ def open_main_app():
     chat_input_container = tk.Frame(frame_chat_main, bg="#f1f0f0", height=60, padx=10, pady=10)
     chat_input_container.pack(side="bottom", fill="x")
 
-    entry_text = tk.Text(chat_input_container, height=2, wrap="word", font=("Arial", 11))
-    entry_text.pack(side="left", fill="both", expand=True, padx=(0, 10))
+    entry_text = tk.Text(chat_input_container, height=2, width=75, wrap="word", font=("Arial", 11))
+    entry_text.pack(side="left", padx=(0, 10))
     state.entry_text = entry_text
 
     chat_history_container_local = tk.Frame(frame_chat_main, bg="white")
@@ -123,7 +125,19 @@ def open_main_app():
         lambda e: "break" if (e.state & 0x0001) else (send_gui_message(), "break")[1],
     )
     tk.Button(chat_input_container, text="Send", command=send_gui_message, bg="#3498db", fg="white").pack(
-        side="right", fill="y"
+        side="right", fill="y", padx=2
+    )
+
+    def send_file():
+        filepath = filedialog.askopenfilename(initialdir="C:\\Downloads",
+                                          title="Send a file",
+                                          filetypes= (
+                                              ("Image Files", ("*.jpg", "*.png", "*,jpeg")),
+                                              ("All Files", "*.*")))
+        state.chat_client.send_media(filepath, state.current_chat_contact)
+
+    tk.Button(chat_input_container, text="Send File", command=send_file, bg="#3498db", fg="white").pack(
+        side="right", fill="y", padx=2
     )
 
     # mark GUI ready and apply any pending user listar
@@ -133,3 +147,7 @@ def open_main_app():
 
         handle_user_list_update(state.pending_user_list)
         state.pending_user_list = None
+    
+    # Register file transfer callbacks with the chat client
+    state.chat_client.on_file_received = handle_file_received
+    state.chat_client.on_file_sent = handle_file_sent
