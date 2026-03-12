@@ -119,15 +119,16 @@ def add_message_bubble(message_text: str, timestamp: str, contact: str, is_me: b
     chat_canvas.yview_moveto(1.0)
 
 
-def add_file_transfer_bubble(filename: str, filepath: str | None, timestamp: str, contact: str, is_me: bool = True):
+def add_file_transfer_bubble(filename: str, filepath: str | None, timestamp: str, contact: str, is_me: bool = True, sender: str | None = None):
     """Insert a file transfer bubble into the appropriate conversation frame.
     
     Args:
         filename: Name of the file being transferred
         filepath: Full path to the file (None for sent files)
         timestamp: Time the transfer occurred
-        contact: Name of the contact involved
+        contact: Name of the contact/group involved
         is_me: True if we sent the file, False if we received it
+        sender: Username of the sender (used for group chats when is_me=False)
     """
     if contact not in state.chat_frames:
         return
@@ -155,15 +156,40 @@ def add_file_transfer_bubble(filename: str, filepath: str | None, timestamp: str
                 img_label.pack(anchor="e")
             else:
                 msg_container.pack(anchor="w", padx=20, pady=5)
+                # Show sender name for group chats
+                if sender and state.current_chat_is_group:
+                    tk.Label(
+                        msg_container,
+                        text=sender,
+                        bg="white",
+                        fg="#555555",
+                        font=("Arial", 9, "bold"),
+                    ).pack(anchor="w")
                 img_label = tk.Label(msg_container, image=photo, bg="#f1f0f0", padx=5, pady=5)
                 img_label.image = photo  # Keep a reference to prevent garbage collection
                 img_label.pack(anchor="w")
         except Exception as e:
             # Fallback to text if image can't be loaded
+            if not is_me and sender and state.current_chat_is_group:
+                tk.Label(
+                    msg_container,
+                    text=sender,
+                    bg="white",
+                    fg="#555555",
+                    font=("Arial", 9, "bold"),
+                ).pack(anchor="w")
             _add_generic_file_bubble(filename, msg_container, is_me)
             print(f"Could not display image: {e}")
     else:
         # Display generic file bubble
+        if not is_me and sender and state.current_chat_is_group:
+            tk.Label(
+                msg_container,
+                text=sender,
+                bg="white",
+                fg="#555555",
+                font=("Arial", 9, "bold"),
+            ).pack(anchor="w")
         _add_generic_file_bubble(filename, msg_container, is_me)
     
     # Add timestamp below the file

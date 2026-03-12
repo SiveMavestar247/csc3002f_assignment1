@@ -34,6 +34,7 @@ class ChatClient:
         self.on_connection_error = error_callback
         self.on_user_list_updated = user_list_callback
         self.on_group_list_updated = group_list_callback
+        self.username = username
         
         try:
             # Create UDP socket for sending and receiving media from peers
@@ -47,7 +48,7 @@ class ChatClient:
             self.tcp_socket.connect((self.server_host, self.server_port))
             self.tcp_socket_addr: str = self.tcp_socket.getsockname()
 
-            self.tcp_socket.send((f"{username}|{self.udp_socket_addr}").encode('utf-8'))  # Send username & UDP socket addr to register with server
+            self.tcp_socket.send((f"{self.username}|{self.udp_socket_addr}").encode('utf-8'))  # Send username & UDP socket addr to register with server
             
             # Start the background listening threads
             threading.Thread(target=self.receive_media, daemon= True).start()
@@ -170,8 +171,13 @@ class ChatClient:
                 print(f"Disconnected from server: {e}")
                 break    
     
-    def send_media(self, filepath: str, target_user: str):
-        """Send formatted media files in chunks to a peer via a UDP socket"""
+    def send_media(self, filepath: str, target: str):
+        """Send formatted media files in chunks to a peer or group via UDP socket.
+        
+        Args:
+            filepath: Path to the file to send
+            target: Target user or group name
+        """
         if not os.path.isfile(filepath):
             print("File not found.")
             return
@@ -186,18 +192,35 @@ class ChatClient:
         chunks = [content[i:i + UDP_CHUNK] for i in range(0, len(content), UDP_CHUNK)]
         total = len(chunks)
 
-        peer : Tuple[str, int] = self.users_dict[target_user]
-        print(f"\n Sending '{filename}' to {peer[0]}:{peer[1]} via UDP ({total} chunks)...")
+        # Check if target is a group
+        if target in self.groups:
+            # Send to all group members
+            members = self.groups[target]
+            group_mode = True
+            print(f"\n Sending '{filename}' to group '{target}' ({len(members)-1} members via UDP ({total} chunks)...")
+        else:
+            # Send to single user
+            members = [target]
+            group_mode = False
+            print(f"\n Sending '{filename}' to {target} via UDP ({total} chunks)...")
 
-        for i, ch in enumerate(chunks):
-            header = f"{tid}|{i}|{total}|{filename}\n".encode("utf-8")
-            self.udp_socket.sendto(header +  ch, peer)
+        # Send to each member
+        for member in members:
+            if member not in self.users_dict or member == self.username:
+                continue
+                
+            peer: Tuple[str, int] = self.users_dict[member]
+            print(f"  Sending to {member} at {peer[0]}:{peer[1]}...")
+
+            for i, ch in enumerate(chunks):
+                header = f"{tid}|{i}|{total}|{filename}\n".encode("utf-8")
+                self.udp_socket.sendto(header + ch, peer)
 
         print("UDP send complete (prototype: no retransmissions).\n")
         
         # Trigger callback to update GUI
         if self.on_file_sent:
-            self.on_file_sent(target_user, filename)  
+            self.on_file_sent(target, filename)  
     
     def receive_media(self):
         """Constantly listens for incoming media."""

@@ -170,24 +170,46 @@ def add_incoming_bubble_safely(contact: str, sender: str, message: str, timestam
 
 
 def handle_file_received(sender: str, filename: str, filepath: str):
-    """Called when a file transfer is completed."""
+    """Called when a file transfer is completed.
+    
+    Args:
+        sender: The user who sent the file
+        filename: Name of the file received
+        filepath: Path where the file was saved
+    """
     timestamp = datetime.now().strftime("%I:%M %p")
+    
+    # Check if we're currently viewing a group and the sender is in that group
+    contact = sender
+    is_group = False
+    
+    if state.current_chat_is_group and state.current_chat_contact in state.groups:
+        group_members = state.groups[state.current_chat_contact]
+        if sender in group_members:
+            # File is from someone in the current group - display in group chat
+            contact = state.current_chat_contact
+            is_group = True
 
-    # ensure we have a frame for this sender
-    if sender not in state.chat_frames:
-        create_chat_frame_for_user(sender)
+    # ensure we have a frame for this contact/group
+    if contact not in state.chat_frames:
+        create_chat_frame_for_user(contact)
 
     # update GUI from main thread safely
-    state.root.after(0, add_file_transfer_bubble, filename, filepath, timestamp, sender, False)
+    state.root.after(0, add_file_transfer_bubble, filename, filepath, timestamp, contact, False, sender if is_group else None)
 
 
-def handle_file_sent(target_user: str, filename: str):
-    """Called when we send a file to another user."""
+def handle_file_sent(target: str, filename: str):
+    """Called when we send a file to another user or group.
+    
+    Args:
+        target: Target user or group name
+        filename: Name of the file sent
+    """
     timestamp = datetime.now().strftime("%I:%M %p")
 
-    # ensure we have a frame for this contact
-    if target_user not in state.chat_frames:
-        create_chat_frame_for_user(target_user)
+    # ensure we have a frame for this contact/group
+    if target not in state.chat_frames:
+        create_chat_frame_for_user(target)
 
     # update GUI from main thread safely (filepath=None for sent files)
-    state.root.after(0, add_file_transfer_bubble, filename, None, timestamp, target_user, True)
+    state.root.after(0, add_file_transfer_bubble, filename, None, timestamp, target, True)
