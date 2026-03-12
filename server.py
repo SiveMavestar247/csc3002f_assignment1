@@ -7,5 +7,5 @@ from server.core import ChatServer
 
 
 if __name__ == "__main__":
-    srv = ChatServer()
+    srv = ChatServer(host="0.0.0.0")
     srv.start()

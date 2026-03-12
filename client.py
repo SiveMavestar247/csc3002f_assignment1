@@ -6,7 +6,7 @@ import uuid
 
 class ChatClient:
     def __init__(self, server_host='127.0.0.1', server_port=5555):
-        self.server_host = server_host
+        self.server_host = "196.24.149.74"
         self.server_port = server_port
         self.tcp_socket = None
         self.udp_socket = None
@@ -39,7 +39,30 @@ class ChatClient:
         try:
             # Create UDP socket for sending and receiving media from peers
             self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.udp_socket.bind(("127.0.0.1", 0))    # OS assigns port on localhost
+            
+            def get_local_ip():
+                """Finds the actual local routing IPv4 address of this computer."""
+                try:
+                    # Create a temporary UDP socket
+                    dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    
+                    # Connect to an external IP (Google DNS). 
+                    # Port 80 is just a placeholder; no actual data is sent.
+                    dummy_socket.connect(("8.8.8.8", 80))
+                    
+                    # Read the IP address the OS assigned to this socket
+                    local_ip = dummy_socket.getsockname()[0]
+                    
+                    # Close the socket so we don't leave trash in the system
+                    dummy_socket.close()
+                    
+                    return local_ip
+                except Exception:
+                    # Fallback just in case the computer has absolutely no network connection
+                    return "127.0.0.1"
+            
+            my_IPv4_addr = get_local_ip()
+            self.udp_socket.bind((my_IPv4_addr, 0))    # OS assigns port
             udp_host, udp_port = self.udp_socket.getsockname()
             self.udp_socket_addr: str = f"{udp_host}:{udp_port}"
             
