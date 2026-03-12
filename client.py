@@ -37,40 +37,20 @@ class ChatClient:
         self.username = username
         
         try:
-            # Create UDP socket for sending and receiving media from peers
-            self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            
-            def get_local_ip():
-                """Finds the actual local routing IPv4 address of this computer."""
-                try:
-                    # Create a temporary UDP socket
-                    dummy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                    
-                    # Connect to an external IP (Google DNS). 
-                    # Port 80 is just a placeholder; no actual data is sent.
-                    dummy_socket.connect(("8.8.8.8", 80))
-                    
-                    # Read the IP address the OS assigned to this socket
-                    local_ip = dummy_socket.getsockname()[0]
-                    
-                    # Close the socket so we don't leave trash in the system
-                    dummy_socket.close()
-                    
-                    return local_ip
-                except Exception:
-                    # Fallback just in case the computer has absolutely no network connection
-                    return "127.0.0.1"
-            
-            my_IPv4_addr = get_local_ip()
-            self.udp_socket.bind((my_IPv4_addr, 0))    # OS assigns port
-            udp_host, udp_port = self.udp_socket.getsockname()
-            self.udp_socket_addr: str = f"{udp_host}:{udp_port}"
-            
             # Create TCP socket for communicating with server
             self.tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.tcp_socket.connect((self.server_host, self.server_port))
-            self.tcp_socket_addr: str = self.tcp_socket.getsockname()
+            tcp_host, tcp_port = self.tcp_socket.getsockname()
+            self.tcp_socket_addr: str = f"{tcp_host}:{tcp_port}"
 
+            # Create UDP socket for sending and receiving media from peers
+            self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            
+            udp_host = self.tcp_socket.getsockname()[0]
+            self.udp_socket.bind((udp_host, 0))    # OS assigns port
+            udp_port = self.udp_socket.getsockname()[1]
+            self.udp_socket_addr: str = f"{udp_host}:{udp_port}"
+            
             self.tcp_socket.send((f"{self.username}|{self.udp_socket_addr}").encode('utf-8'))  # Send username & UDP socket addr to register with server
             
             # Start the background listening threads
