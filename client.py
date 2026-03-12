@@ -15,13 +15,17 @@ class ChatClient:
         self.on_message_received = None
         self.on_connection_error = None
         self.on_user_list_updated = None
+        self.on_group_list_updated = None
         self.on_file_received = None  # (sender, filename, filepath)
         self.on_file_sent = None      # (target_user, filename)
+        
+        # Track groups locally (group_name -> list of members)
+        self.groups: Dict[str, list[str]] = {}
         
         # Track peer addresses to their usernames for file transfers
         self.peer_addresses: Dict[Tuple[str, int], str] = {}
 
-    def connect(self, username: str, message_callback, error_callback, user_list_callback=None) -> bool:
+    def connect(self, username: str, message_callback, error_callback, user_list_callback=None, group_list_callback=None) -> bool:
         """
         Connects to the server and starts listening in the background. <p>
         Return True on successful connection, False otherwise
@@ -29,6 +33,7 @@ class ChatClient:
         self.on_message_received = message_callback
         self.on_connection_error = error_callback
         self.on_user_list_updated = user_list_callback
+        self.on_group_list_updated = group_list_callback
         
         try:
             # Create UDP socket for sending and receiving media from peers
@@ -57,43 +62,109 @@ class ChatClient:
                 self.on_connection_error(str(e))
             return False
 
-    def send_message(self, target_user, message):
-        """Sends a formatted message to the server via a TCP socket"""
+    def send_message(self, target, message):
+        """Sends a formatted message to the server via a TCP socket.
+        
+        If target is a group, sends GROUP_MESSAGE format.
+        If target is a user, sends regular user message format.
+        """
         if self.tcp_socket:
             try:
-                network_payload = f"{target_user}|{message}"
+                # Check if target is a group
+                if target in self.groups:
+                    # Send as group message
+                    network_payload = f"GROUP_MESSAGE|{target}|{message}\n"
+                else:
+                    # Send as individual message
+                    network_payload = f"{target}|{message}\n"
                 self.tcp_socket.send(network_payload.encode('utf-8'))
             except Exception as e:
                 print(f"Failed to send message: {e}")
+    
+    def create_group(self, group_name: str, members: list[str]):
+        """Send a group creation request to the server"""
+        if self.tcp_socket:
+            try:
+                members_str = ",".join(members)
+                network_payload = f"GROUP_CREATE|{group_name}|{members_str}"
+                self.tcp_socket.send(network_payload.encode('utf-8'))
+            except Exception as e:
+                print(f"Failed to create group: {e}")
 
     def receive_messages(self):
         """Constantly listens for incoming messages."""
+        buffer = ""
         while True:
             try:
                 data = self.tcp_socket.recv(1024).decode('utf-8')
                 if not data:
                     break
                 
-                # Split "Sender|Message"
-                sender, msg = data.split('|', 1)
+                buffer += data
                 
-                # Check if it's a user list update
-                if sender == "USERS":
-                    if self.on_user_list_updated:
-                        users = msg.split(',')
-                        self.users_dict: Dict[str, Tuple[str, int]] = {}
-                        for user in users:
-                            username, rem = user.split("(")
-                            host, port = rem.rstrip(")").split(":")
-                            peer_addr = (host, int(port))
-                            self.users_dict[username] = peer_addr
-                            # Track the mapping from address to username for incoming file transfers
-                            self.peer_addresses[peer_addr] = username
-                        self.on_user_list_updated(self.users_dict.keys())
-                else:
-                    # Trigger the GUI function to update the screen
-                    if self.on_message_received:
-                        self.on_message_received(sender, msg)
+                # Process complete messages (delimited by newline)
+                while '\n' in buffer:
+                    line, buffer = buffer.split('\n', 1)
+                    line = line.strip()
+                    
+                    if not line:
+                        continue
+                    
+                    # Split "Sender|Message"
+                    if '|' not in line:
+                        continue
+                        
+                    sender, msg = line.split('|', 1)
+                    
+                    # Check if it's a group message
+                    if sender == "GROUP":
+                        # Format: GROUP|groupname|sender|message
+                        parts = msg.split('|', 2)
+                        if len(parts) >= 3:
+                            group_name = parts[0]
+                            actual_sender = parts[1]
+                            actual_message = parts[2]
+                            # Call message received with group info
+                            if self.on_message_received:
+                                self.on_message_received(actual_sender, actual_message, group=group_name)
+                        continue
+                    
+                    # Check if it's a user list update
+                    if sender == "USERS":
+                        if self.on_user_list_updated:
+                            users = msg.split(',')
+                            self.users_dict: Dict[str, Tuple[str, int]] = {}
+                            for user in users:
+                                if '(' not in user or ')' not in user:
+                                    continue
+                                username, rem = user.split("(", 1)
+                                host, port = rem.rstrip(")").split(":")
+                                try:
+                                    peer_addr = (host, int(port))
+                                    self.users_dict[username] = peer_addr
+                                    # Track the mapping from address to username for incoming file transfers
+                                    self.peer_addresses[peer_addr] = username
+                                except ValueError:
+                                    continue
+                            self.on_user_list_updated(self.users_dict.keys())
+                    # Check if it's a group list update
+                    elif sender == "GROUPS":
+                        if self.on_group_list_updated:
+                            groups = {}
+                            # Parse format: groupname:user1,user2;groupname2:user3,user4
+                            if msg.strip():
+                                for group_entry in msg.split(';'):
+                                    if ':' in group_entry:
+                                        group_name, members_str = group_entry.split(':', 1)
+                                        members = [m.strip() for m in members_str.split(',') if m.strip()]
+                                        groups[group_name.strip()] = members
+                            # Update local groups dict
+                            self.groups = groups
+                            self.on_group_list_updated(groups)
+                    else:
+                        # Regular message
+                        if self.on_message_received:
+                            self.on_message_received(sender, msg)
                     
             except Exception as e:
                 print(f"Disconnected from server: {e}")
@@ -174,3 +245,4 @@ class ChatClient:
         if self.tcp_socket or self.udp_socket:
             self.tcp_socket.close()
             self.udp_socket.close()
+            print(f"Disconnected from server and closed UDP socket")

@@ -1,6 +1,6 @@
 """Utility functions for constructing and manipulating chat widgets.
 
-The functions in this module are intentionally GUI‑agnostic; they simply
+The functions in this module are intentionally GUI-agnostic; they simply
 create frame hierarchies and message bubbles.  They are consumed by
 ``main_app.py`` and ``callbacks.py``.
 """
@@ -55,8 +55,16 @@ def create_chat_frame_for_user(contact_name: str):
     state.chat_frames[contact_name] = (scroll_frame, canvas)
 
 
-def add_message_bubble(message_text: str, timestamp: str, contact: str, is_me: bool = True):
-    """Insert a message bubble into the appropriate conversation frame."""
+def add_message_bubble(message_text: str, timestamp: str, contact: str, is_me: bool = True, sender: str | None = None):
+    """Insert a message bubble into the appropriate conversation frame.
+    
+    Args:
+        message_text: The message content
+        timestamp: Time the message was sent
+        contact: Name of the contact/group
+        is_me: True if we sent the message, False if we received it
+        sender: Username of the sender (used for group chats when is_me=False)
+    """
     if contact not in state.chat_frames:
         return
     scrollable_chat, chat_canvas = state.chat_frames[contact]
@@ -81,6 +89,15 @@ def add_message_bubble(message_text: str, timestamp: str, contact: str, is_me: b
         ).pack(anchor="e")
     else:
         msg_container.pack(anchor="w", padx=20, pady=5)
+        # Show sender name for group chats
+        if sender and state.current_chat_is_group:
+            tk.Label(
+                msg_container,
+                text=sender,
+                bg="white",
+                fg="#555555",
+                font=("Arial", 9, "bold"),
+            ).pack(anchor="w")
         tk.Label(
             msg_container,
             text=message_text,

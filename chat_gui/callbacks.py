@@ -21,6 +21,9 @@ def handle_network_error(error_msg: str):
 
 def handle_user_list_update(users: list[str]):
     """Called when the server sends an updated list of online users."""
+    # Store the online users in state
+    state.online_users = [u for u in users if u and u != state.current_user]
+    
     # if GUI hasn't finished initialisation, cache the list for later
     if not state.gui_ready:
         state.pending_user_list = users
@@ -42,20 +45,63 @@ def handle_user_list_update(users: list[str]):
             btn = tk.Button(
                 state.scrollable_contacts,
                 text=user,
-                command=lambda c=user: show_chat(c),
+                command=lambda c=user: show_chat(c, is_group=False),
                 relief="flat",
                 bg="white",
             )
             btn.pack(fill="x", padx=5, pady=2)
+    
+    # Add groups if they exist
+    for group_name in sorted(state.groups.keys()):
+        if group_name not in state.chat_frames:
+            create_chat_frame_for_user(group_name)
+        
+        btn = tk.Button(
+            state.scrollable_contacts,
+            text=group_name.upper(),
+            command=lambda c=group_name: show_chat(c, is_group=True),
+            relief="flat",
+            bg="#e8f4f8",
+            fg="#0066cc",
+        )
+        btn.pack(fill="x", padx=5, pady=2)
 
 
-def show_chat(contact_name: str):
-    """Switch the displayed chat to a different contact."""
+def handle_group_list_update(groups: dict[str, list[str]]):
+    """Called when the server sends an updated list of groups."""
+    # if GUI hasn't finished initialisation, cache the list for later
+    if not state.gui_ready:
+        state.pending_group_list = groups
+        return
+    
+    state.groups = groups
+    
+    # Refresh the contacts list to show the updated groups
+    if state.online_users:
+        handle_user_list_update(state.online_users + [state.current_user])
+    elif state.pending_user_list is not None:
+        handle_user_list_update(state.pending_user_list)
+
+
+def show_chat(contact_name: str, is_group: bool = False):
+    """Switch the displayed chat to a different contact or group."""
     if not contact_name:
         return
     state.current_chat_contact = contact_name
+    state.current_chat_is_group = is_group
+    
     if state.lbl_chat_title:
-        state.lbl_chat_title.config(text=f"Chatting with {contact_name}")
+        if is_group:
+            state.lbl_chat_title.config(text=f"Group: {contact_name.upper()}")
+            # Show group members in subtitle
+            if state.lbl_chat_subtitle and contact_name in state.groups:
+                members = ", ".join(state.groups[contact_name])
+                state.lbl_chat_subtitle.config(text=f"Members: {members}")
+        else:
+            state.lbl_chat_title.config(text=f"Chatting with {contact_name}")
+            # Hide subtitle for individual chats
+            if state.lbl_chat_subtitle:
+                state.lbl_chat_subtitle.config(text="")
 
     # hide all chat containers and only display the selected one
     for user, container in state.chat_containers.items():
@@ -65,26 +111,44 @@ def show_chat(contact_name: str):
             container.pack_forget()
 
 
-def handle_incoming_message(sender: str, message: str):
-    """This is invoked by the network client when a message arrives."""
+def handle_incoming_message(sender: str, message: str, group: str | None = None):
+    """This is invoked by the network client when a message arrives.
+    
+    Args:
+        sender: The user who sent the message
+        message: The message content
+        group: The group name if this is a group message, None for individual messages
+    """
     timestamp = datetime.now().strftime("%I:%M %p")
+    contact = group if group else sender
 
-    # ensure we have a frame for this sender
-    if sender not in state.chat_frames:
-        create_chat_frame_for_user(sender)
+    # ensure we have a frame for this sender/group
+    if contact not in state.chat_frames:
+        create_chat_frame_for_user(contact)
 
     # update GUI from main thread safely
-    state.root.after(0, add_incoming_bubble_safely, sender, message, timestamp)
+    state.root.after(0, add_incoming_bubble_safely, contact, sender, message, timestamp, group is not None)
 
 
-def add_incoming_bubble_safely(sender: str, message: str, timestamp: str):
+def add_incoming_bubble_safely(contact: str, sender: str, message: str, timestamp: str, is_group: bool = False):
     """Draw an incoming message bubble on the GUI thread."""
-    if sender not in state.chat_frames:
+    if contact not in state.chat_frames:
         return
 
-    scrollable_chat, chat_canvas = state.chat_frames[sender]
+    scrollable_chat, chat_canvas = state.chat_frames[contact]
     msg_container = tk.Frame(scrollable_chat, bg="white")
     msg_container.pack(anchor="w", padx=20, pady=5)
+    
+    # Show sender name for group chats
+    if is_group:
+        tk.Label(
+            msg_container,
+            text=sender,
+            bg="white",
+            fg="#555555",
+            font=("Arial", 9, "bold"),
+        ).pack(anchor="w")
+    
     tk.Label(
         msg_container,
         text=message,

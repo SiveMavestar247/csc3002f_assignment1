@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from . import state
-from .callbacks import handle_incoming_message, handle_network_error, handle_user_list_update
+from .callbacks import handle_incoming_message, handle_network_error, handle_user_list_update, handle_group_list_update
 from .main_app import open_main_app
 
 def setup_login_window():
@@ -42,6 +42,7 @@ def login():
         message_callback=handle_incoming_message,
         error_callback=handle_network_error,
         user_list_callback=handle_user_list_update,
+        group_list_callback=handle_group_list_update,
     )
 
     if success:
