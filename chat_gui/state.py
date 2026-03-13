@@ -37,7 +37,36 @@ chat_containers: dict[str, tk.Frame] = {}             # contact/group -> frame t
 chat_history_container: tk.Frame | None = None       # Main container for chat frames
 main_window: tk.Tk | None = None                    # Main application window
 lbl_chat_title: tk.Label | None = None
+btn_group_settings: tk.Button | None = None         # Group settings button
 
 # Callbacks for file transfers
 on_file_received = None  # Called when file is received: (sender, filename, filepath)
 on_file_sent = None      # Called when file is sent: (target_user, filename)
+entry_text: tk.Text | None = None  # Message input field
+
+
+def reset_gui_state():
+    """Reset all GUI-related state variables when logging out."""
+    global current_user, current_chat_contact, current_chat_is_group
+    global scrollable_contacts, online_users, gui_ready
+    global pending_user_list, pending_group_list, groups
+    global chat_frames, chat_containers, chat_history_container, main_window
+    global lbl_chat_title, lbl_chat_subtitle, btn_group_settings, entry_text
+    
+    current_user = None
+    current_chat_contact = None
+    current_chat_is_group = False
+    scrollable_contacts = None
+    online_users = []
+    gui_ready = False
+    pending_user_list = None
+    pending_group_list = None
+    groups = {}
+    chat_frames = {}
+    chat_containers = {}
+    chat_history_container = None
+    main_window = None
+    lbl_chat_title = None
+    lbl_chat_subtitle = None
+    btn_group_settings = None
+    entry_text = None

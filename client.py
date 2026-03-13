@@ -10,6 +10,7 @@ class ChatClient:
         self.server_port = server_port
         self.tcp_socket = None
         self.udp_socket = None
+        self.is_disconnecting = False  # Flag to track intentional disconnection
         
         # Callbacks (functions provided by the GUI to update the screen)
         self.on_message_received = None
@@ -90,10 +91,35 @@ class ChatClient:
         if self.tcp_socket:
             try:
                 members_str = ",".join(members)
-                network_payload = f"GROUP_CREATE|{group_name}|{members_str}"
+                network_payload = f"GROUP_CREATE|{group_name}|{members_str}\n"
                 self.tcp_socket.send(network_payload.encode('utf-8'))
             except Exception as e:
                 print(f"Failed to create group: {e}")
+
+    def modify_group(self, old_group_name: str, new_group_name: str, users_to_add: list[str]):
+        """Send a group modification request to the server.
+        
+        Args:
+            old_group_name: Current group name
+            new_group_name: New group name
+            users_to_add: List of users to add to the group
+        """
+        if self.tcp_socket:
+            try:
+                users_str = ",".join(users_to_add) if users_to_add else ""
+                network_payload = f"GROUP_MODIFY|{old_group_name}|{new_group_name}|{users_str}\n"
+                self.tcp_socket.send(network_payload.encode('utf-8'))
+            except Exception as e:
+                print(f"Failed to modify group: {e}")
+
+    def leave_group(self, group_name: str):
+        """Send a leave group request to the server."""
+        if self.tcp_socket:
+            try:
+                network_payload = f"GROUP_LEAVE|{group_name}\n"
+                self.tcp_socket.send(network_payload.encode('utf-8'))
+            except Exception as e:
+                print(f"Failed to leave group: {e}")
 
     def receive_messages(self):
         """Constantly listens for incoming messages."""
@@ -171,7 +197,9 @@ class ChatClient:
                             self.on_message_received(sender, msg)
                     
             except Exception as e:
-                print(f"Disconnected from server: {e}")
+                # Only print error if this is not an intentional disconnect
+                if not self.is_disconnecting:
+                    print(f"Disconnected from server: {e}")
                 break    
     
     def send_media(self, filepath: str, target: str):
@@ -263,12 +291,27 @@ class ChatClient:
                     
                     transfers.pop(tid, None)
             except Exception as e:
-                print(f"Disconnected from server: {e}")
+                # Only print error if this is not an intentional disconnect
+                if not self.is_disconnecting:
+                    print(f"Disconnected from server: {e}")
                 break    
 
     def disconnect(self):
         """Closes the network connection safely."""
-        if self.tcp_socket or self.udp_socket:
-            self.tcp_socket.close()
-            self.udp_socket.close()
-            print(f"Disconnected from server and closed UDP socket")
+        # Set flag to indicate intentional disconnect
+        self.is_disconnecting = True
+        
+        # Close sockets safely
+        if self.tcp_socket:
+            try:
+                self.tcp_socket.close()
+            except:
+                pass
+        
+        if self.udp_socket:
+            try:
+                self.udp_socket.close()
+            except:
+                pass
+        
+        print("Disconnected from server and closed sockets")
